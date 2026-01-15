@@ -1,191 +1,50 @@
-import { AlertTriangle, BarChart3, Download, Plus, Upload } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import LessonForm from './components/LessonForm'
-import TradeForm from './components/TradeForm'
-import TradeList from './components/TradeList'
-import { autoSaveToFile, loadTradesFromFile, saveTradesToFile } from './utils/fileStorage'
+import { BarChart3 } from 'lucide-react'
+import { useState } from 'react'
+import FileOperations from './components/FileOperations'
+import TabNavigation from './components/TabNavigation'
+import { LessonsTabContent, RulesTabContent, TradesTabContent } from './components/TabContent'
+import { useFileOperations } from './hooks/useFileOperations'
+import { useLocalStorageData } from './hooks/useLocalStorageData'
+import { useLessonManager, useRuleManager, useTradeManager } from './hooks/useItemManager'
 
 function App() {
-  const [trades, setTrades] = useState([])
-  const [lessons, setLessons] = useState([])
+  const [activeTab, setActiveTab] = useState('trades')
   const [showForm, setShowForm] = useState(false)
   const [showLessonForm, setShowLessonForm] = useState(false)
+  const [showRuleForm, setShowRuleForm] = useState(false)
   const [editingTrade, setEditingTrade] = useState(null)
   const [editingLesson, setEditingLesson] = useState(null)
+  const [editingRule, setEditingRule] = useState(null)
 
-  // Load trades and lessons from localStorage on mount
-  useEffect(() => {
-    try {
-      const savedTrades = localStorage.getItem('trades')
-      if (savedTrades) {
-        const parsedTrades = JSON.parse(savedTrades)
-        if (Array.isArray(parsedTrades)) {
-          // Separate trades and lessons
-          const regularTrades = parsedTrades.filter(t => t.type !== 'lesson')
-          const lessonItems = parsedTrades.filter(t => t.type === 'lesson')
-          setTrades(regularTrades)
-          setLessons(lessonItems)
-          console.log('Loaded:', regularTrades.length, 'trades,', lessonItems.length, 'lessons')
-        }
-      }
+  // Load and save data from/to localStorage
+  const { trades, setTrades, lessons, setLessons, rules, setRules } = useLocalStorageData()
 
-      // Also try loading from old format (backward compatibility)
-      const savedLessons = localStorage.getItem('lessons')
-      if (savedLessons) {
-        try {
-          const parsedLessons = JSON.parse(savedLessons)
-          if (Array.isArray(parsedLessons)) {
-            setLessons(parsedLessons)
-          }
-        } catch (e) {
-          console.error('Error loading lessons:', e)
-        }
-      }
-    } catch (error) {
-      console.error('Error loading from localStorage:', error)
-    }
-  }, [])
+  // File operations
+  const { handleExport, handleImport } = useFileOperations(
+    trades, lessons, rules, setTrades, setLessons, setRules
+  )
 
-  // Save trades and lessons to localStorage and auto-save to file whenever they change
-  useEffect(() => {
-    try {
-      // Combine trades and lessons for saving
-      const allData = [...trades, ...lessons]
-      localStorage.setItem('trades', JSON.stringify(allData))
-      // Auto-save to file if file handle exists
-      autoSaveToFile(allData).then(success => {
-        if (success) {
-          console.log('Auto-saved to file')
-        }
-      })
-    } catch (error) {
-      console.error('Error saving to localStorage:', error)
-      if (error.name === 'QuotaExceededError') {
-        alert('Lưu trữ đã đầy. Vui lòng xóa một số trades cũ hoặc ảnh để giải phóng dung lượng.')
-      }
-    }
-  }, [trades, lessons])
+  // Item managers for CRUD operations
+  const tradeManager = useTradeManager(
+    trades, setTrades, showForm, setShowForm, editingTrade, setEditingTrade
+  )
+  const lessonManager = useLessonManager(
+    lessons, setLessons, showLessonForm, setShowLessonForm, editingLesson, setEditingLesson
+  )
+  const ruleManager = useRuleManager(
+    rules, setRules, showRuleForm, setShowRuleForm, editingRule, setEditingRule
+  )
 
-  const handleAddTrade = (newTrade) => {
-    let updatedTrades
-    if (editingTrade) {
-      updatedTrades = trades.map(trade =>
-        trade.id === editingTrade.id
-          ? { ...newTrade, id: editingTrade.id }
-          : trade
-      )
-      setEditingTrade(null)
-    } else {
-      const tradeWithId = {
-        ...newTrade,
-        id: Date.now().toString()
-      }
-      updatedTrades = [tradeWithId, ...trades]
-    }
-
-    setTrades(updatedTrades)
+  // Handlers for closing forms when switching tabs
+  const handleCloseForms = () => {
     setShowForm(false)
-  }
-
-  const handleAddLesson = (newLesson) => {
-    let updatedLessons
-    if (editingLesson) {
-      updatedLessons = lessons.map(lesson =>
-        lesson.id === editingLesson.id
-          ? { ...newLesson, id: editingLesson.id }
-          : lesson
-      )
-      setEditingLesson(null)
-    } else {
-      const lessonWithId = {
-        ...newLesson,
-        id: Date.now().toString()
-      }
-      updatedLessons = [lessonWithId, ...lessons]
-    }
-
-    setLessons(updatedLessons)
     setShowLessonForm(false)
+    setShowRuleForm(false)
   }
 
-  const handleEditTrade = (trade) => {
-    setEditingTrade(trade)
-    setShowForm(true)
-  }
-
-  const handleEditLesson = (lesson) => {
-    setEditingLesson(lesson)
-    setShowLessonForm(true)
-  }
-
-  const handleDeleteTrade = (id) => {
-    if (window.confirm('Bạn có chắc muốn xóa trade này?')) {
-      setTrades(trades.filter(trade => trade.id !== id))
-    }
-  }
-
-  const handleDeleteLesson = (id) => {
-    if (window.confirm('Bạn có chắc muốn xóa case này?')) {
-      setLessons(lessons.filter(lesson => lesson.id !== id))
-    }
-  }
-
-  const handleCancelForm = () => {
-    setShowForm(false)
-    setEditingTrade(null)
-  }
-
-  const handleCancelLessonForm = () => {
-    setShowLessonForm(false)
-    setEditingLesson(null)
-  }
-
-  const handleExportToFile = async () => {
-    const allData = [...trades, ...lessons]
-    const result = await saveTradesToFile(allData)
-    if (result.success) {
-      alert(result.message)
-    } else {
-      alert(result.message)
-    }
-  }
-
-  const handleImportFromFile = async () => {
-    const result = await loadTradesFromFile()
-    if (result.success && result.data) {
-      const totalItems = trades.length + lessons.length
-      if (totalItems > 0) {
-        const action = window.confirm(
-          `Bạn có ${totalItems} items hiện tại.\n\n` +
-          `OK = Merge (gộp dữ liệu mới vào dữ liệu cũ)\n` +
-          `Cancel = Replace (thay thế hoàn toàn)`
-        )
-
-        if (action) {
-          const existingIds = new Set([...trades, ...lessons].map(t => t.id))
-          const newItems = result.data.filter(t => !existingIds.has(t.id))
-          const importedTrades = newItems.filter(t => t.type !== 'lesson')
-          const importedLessons = newItems.filter(t => t.type === 'lesson')
-          setTrades([...trades, ...importedTrades])
-          setLessons([...lessons, ...importedLessons])
-          alert(`Đã merge ${newItems.length} items mới.`)
-        } else {
-          const importedTrades = result.data.filter(t => t.type !== 'lesson')
-          const importedLessons = result.data.filter(t => t.type === 'lesson')
-          setTrades(importedTrades)
-          setLessons(importedLessons)
-          alert(`Đã thay thế ${totalItems} items cũ bằng ${result.data.length} items mới.`)
-        }
-      } else {
-        const importedTrades = result.data.filter(t => t.type !== 'lesson')
-        const importedLessons = result.data.filter(t => t.type === 'lesson')
-        setTrades(importedTrades)
-        setLessons(importedLessons)
-        alert(`Đã import ${result.data.length} items từ file.`)
-      }
-    } else {
-      alert(result.message)
-    }
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId)
+    handleCloseForms()
   }
 
   return (
@@ -198,68 +57,62 @@ function App() {
       </header>
 
       <div className="bg-white rounded-xl p-6 md:p-8 shadow-2xl">
-        {/* File operations buttons */}
-        <div className="mb-4 flex gap-2 justify-end">
-          <button
-            onClick={handleImportFromFile}
-            className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors duration-300 font-semibold flex items-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            Import từ File
-          </button>
-          <button
-            onClick={handleExportToFile}
-            className="px-4 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors duration-300 font-semibold flex items-center gap-2"
-          >
-            <Upload className="w-4 h-4" />
-            Export ra File
-          </button>
-        </div>
-        {!showForm && !showLessonForm ? (
-          <div className="mb-8 flex gap-3">
-            <button
-              className="flex-1 p-4 text-lg font-semibold rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2"
-              onClick={() => {
-                setEditingTrade(null)
-                setShowForm(true)
-              }}
-            >
-              <Plus className="w-5 h-5" />
-              Thêm Trade Mới
-            </button>
-            <button
-              className="flex-1 p-4 text-lg font-semibold rounded-lg bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2"
-              onClick={() => {
-                setEditingLesson(null)
-                setShowLessonForm(true)
-              }}
-            >
-              <AlertTriangle className="w-5 h-5" />
-              Thêm Case đáng lưu ý
-            </button>
-          </div>
-        ) : showForm ? (
-          <TradeForm
-            onSubmit={handleAddTrade}
-            onCancel={handleCancelForm}
-            initialData={editingTrade}
-          />
-        ) : (
-          <LessonForm
-            onSubmit={handleAddLesson}
-            onCancel={handleCancelLessonForm}
-            initialData={editingLesson}
+        <FileOperations onImport={handleImport} onExport={handleExport} />
+
+        <TabNavigation
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          onCloseForms={handleCloseForms}
+        />
+
+        {/* Content based on active tab */}
+        {activeTab === 'trades' && (
+          <TradesTabContent
+            trades={trades}
+            showForm={showForm}
+            editingTrade={editingTrade}
+            onAddClick={() => {
+              setEditingTrade(null)
+              setShowForm(true)
+            }}
+            onAdd={tradeManager.handleAdd}
+            onCancel={tradeManager.handleCancel}
+            onDelete={(id) => tradeManager.handleDelete(id, 'Bạn có chắc muốn xóa trade này?')}
+            onEdit={tradeManager.handleEdit}
           />
         )}
 
-        <TradeList
-          trades={trades}
-          lessons={lessons}
-          onDelete={handleDeleteTrade}
-          onDeleteLesson={handleDeleteLesson}
-          onEdit={handleEditTrade}
-          onEditLesson={handleEditLesson}
-        />
+        {activeTab === 'lessons' && (
+          <LessonsTabContent
+            lessons={lessons}
+            showForm={showLessonForm}
+            editingLesson={editingLesson}
+            onAddClick={() => {
+              setEditingLesson(null)
+              setShowLessonForm(true)
+            }}
+            onAdd={lessonManager.handleAdd}
+            onCancel={lessonManager.handleCancel}
+            onDelete={(id) => lessonManager.handleDelete(id, 'Bạn có chắc muốn xóa case này?')}
+            onEdit={lessonManager.handleEdit}
+          />
+        )}
+
+        {activeTab === 'rules' && (
+          <RulesTabContent
+            rules={rules}
+            showForm={showRuleForm}
+            editingRule={editingRule}
+            onAddClick={() => {
+              setEditingRule(null)
+              setShowRuleForm(true)
+            }}
+            onAdd={ruleManager.handleAdd}
+            onCancel={ruleManager.handleCancel}
+            onDelete={(id) => ruleManager.handleDelete(id, 'Bạn có chắc muốn xóa quy tắc này?')}
+            onEdit={ruleManager.handleEdit}
+          />
+        )}
       </div>
     </div>
   )
